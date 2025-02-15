@@ -8,7 +8,7 @@ public class DemoJob
     public class Request : IJobRequest
     {
         public string JobId { get; set; } = Guid.NewGuid().ToString();
-        public string Cron { get; set; } = "*/5 * * * *";
+        public string Cron { get; set; } = "*/1 * * * *"; // 每 1 分鐘執行一次
     }
 
     public class Handler(ILogger<Handler> logger) : IJobHandler<Request>

@@ -22,8 +22,7 @@ mono_crash.*
 # Windows image file caches
 Thumbs.db
 ehthumbs.db
-*.db
-Data Source=*
+Hangfire.db*
 
 # Folder config file
 Desktop.ini
