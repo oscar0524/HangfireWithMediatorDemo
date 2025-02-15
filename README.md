@@ -12,7 +12,7 @@ This project demonstrates the integration of Hangfire with Mediator in a .NET ap
 
 1. Clone the repository:
     ```sh
-    git clone https://github.com/yourusername/HangfireWithMediator.git
+    git clone https://github.com/oscar0524/HangfireWithMediatorDemo.git
     cd HangfireWithMediator
     ```
 
