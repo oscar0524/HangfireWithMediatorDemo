@@ -16,6 +16,8 @@ public class DemoJob
         public Task Handle(Request request, CancellationToken cancellationToken)
         {
             logger.LogInformation($"DemoJob is running at {DateTime.Now}");
+            logger.LogWarning("This is a warning message.");
+            logger.LogError("This is an error message.");            
             return Task.CompletedTask;
         }      
     }

@@ -5,6 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddServiceDefault();
 builder.Services.AddHangfireDefault();
+builder.AddOpenTelemetryDefault();
 
 var app = builder.Build();
 app.UseHangfireDefault();

@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.Reflection;
 using Hangfire;
+using Hangfire.Dashboard;
 using Hangfire.Storage.SQLite;
 using HangfireWithMediator.Abstractions;
 using HangfireWithMediator.Infrastructure;
@@ -73,13 +75,18 @@ public static class HangfireDefaults
         }
 
         // 使用 Hangfire Dashboard 介面
-        app.UseHangfireDashboard();
+        app.UseHangfireDashboard("/hangfire", new DashboardOptions()
+        {
+            Authorization = [new HangfireAuthorizationFilter()]
+        });
 
         // 啟動 Hangfire Job
         app.ApplicationServices.GetRequiredService<HangfireJobScheduler>().Start();
     }
 
 }
+
+
 
 /// <summary>
 /// 執行Hangfire Job 的服務
@@ -120,8 +127,21 @@ public class HangfireJobScheduler(IServiceProvider serviceProvider)
     {
         // 因為執行這個環境是在Singleton的環境下，所以需要重新建立Scope
         using var scope = serviceProvider.CreateScope();
+        var activitySource=scope.ServiceProvider.GetRequiredService<ActivitySource>();
         var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        using var activity = activitySource.StartActivity(jobRequest.JobId,ActivityKind.Client);
         mediator.Send(jobRequest);
     }
 
+}
+
+
+public class HangfireAuthorizationFilter : IDashboardAuthorizationFilter
+{
+    public bool Authorize(DashboardContext context)
+    {
+        //var httpcontext = context.GetHttpContext();
+        //return httpcontext.User.Identity.IsAuthenticated;
+        return true;
+    }
 }
