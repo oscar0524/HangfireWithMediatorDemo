@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -12,11 +13,7 @@ public static class OpenTelemetryExtension
         var otlpEndpoint = builder.Configuration.GetValue("Otlp:Endpoint", defaultValue: "http://localhost:4317");
         var ignorePath = new string[] { "/hangfire" };
 
-        builder.Logging.AddOpenTelemetry(logging =>
-        {
-            logging.IncludeFormattedMessage = true;
-            logging.IncludeScopes = true;
-        });
+        builder.Logging.ClearProviders();
 
         builder.Services.AddOpenTelemetry()
             .ConfigureResource((resource) => resource.AddService(serviceName: builder.Environment.ApplicationName))
@@ -33,14 +30,7 @@ public static class OpenTelemetryExtension
                 tracing.AddHttpClientInstrumentation()
                     .AddAspNetCoreInstrumentation(options =>
                     {
-                        options.Filter = (httpContext) =>
-                        {
-                            if (ignorePath.Any(path => httpContext.Request.Path.StartsWithSegments(path)))
-                            {
-                                return false;
-                            }
-                            return true;
-                        };
+                        options.Filter = (httpContext) => ignorePath.Any(path => httpContext.Request.Path.StartsWithSegments(path)) == false;
                     });
                 tracing.AddOtlpExporter(otlpExporterOptions => { otlpExporterOptions.Endpoint = new Uri(otlpEndpoint); });
             })
@@ -49,7 +39,20 @@ public static class OpenTelemetryExtension
                 logging.AddOtlpExporter(otlpExporterOptions => { otlpExporterOptions.Endpoint = new Uri(otlpEndpoint); });
             });
 
-
         return builder;
+    }
+
+    // See https://opentelemetry.io/docs/specs/otel/trace/semantic_conventions/exceptions/
+    public static void SetExceptionTags(this Activity activity, Exception ex)
+    {
+        if (activity is null)
+        {
+            return;
+        }
+
+        activity.AddTag("exception.message", ex.Message);
+        activity.AddTag("exception.stacktrace", ex.ToString());
+        activity.AddTag("exception.type", ex.GetType().FullName);
+        activity.SetStatus(ActivityStatusCode.Error);
     }
 }

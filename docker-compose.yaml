@@ -1,75 +1,59 @@
 version: '3.8'
 
+x-defaults: &defaults
+  restart: always
+  environment:
+    - TZ=Asia/Taipei
+
 services:
   grafana:
+    <<: *defaults
     image: grafana/grafana:11.5.1
     ports:
       - "3000:3000"
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - TZ=Asia/Taipei
-    volumes:
-      - grafana-data:/var/lib/grafana
 
   loki:
+    <<: *defaults
     image: grafana/loki:3.4.2
-    command: 
+    command:
       - '-config.file=/etc/loki/local-config.yaml'
-      - '-config.expand-env=true'
-    environment:
-      - TZ=Asia/Taipei
     volumes:
       - ./loki-config.yaml:/etc/loki/local-config.yaml
-      - loki-data:/loki
 
   tempo:
+    <<: *defaults
     image: grafana/tempo:main-068b85c
-    command: ["-config.file=/etc/tempo.yaml"]
+    command:
+      - '-config.file=/etc/tempo.yaml'
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml
-    environment:
-      - TZ=Asia/Taipei
 
   prometheus:
+    <<: *defaults
     image: prom/prometheus:v3.1.0
-    ports:
-      - "9090:9090"
-    environment:
-      - TZ=Asia/Taipei
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.enable-lifecycle'
-      - '--web.enable-remote-write-receiver'
       - '--web.enable-otlp-receiver'
 
-  node-exporter:
-    image: quay.io/prometheus/node-exporter:v1.8.2
-    command:
-      - '--path.rootfs=/host'
-    volumes:
-      - '/:/host:ro,rslave'
-
   otel-collector:
+    <<: *defaults
     image: otel/opentelemetry-collector:0.119.0
-    command: ["--config=/etc/otel-collector-config.yaml"]
+    command:
+      - '--config=/etc/otel-collector-config.yaml'
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
-    environment:
-      - TZ=Asia/Taipei
     ports:
-      - "4317:4317"   # OTLP gRPC receiver
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
     depends_on:
       - prometheus
       - tempo
       - loki
-      - node-exporter
-
-volumes:
-  grafana-data:
-  loki-data:
-  prometheus-data:

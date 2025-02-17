@@ -11,6 +11,69 @@ using Microsoft.EntityFrameworkCore;
 
 namespace HangfireWithMediator.Core.Extensions;
 
+public class HangfireTelemetry
+{
+    public const string ActivitySourceName = "Hangfire";
+    public readonly ActivitySource ActivitySource = new ActivitySource(ActivitySourceName);
+}
+
+public class HangfireAuthorizationFilter : IDashboardAuthorizationFilter
+{
+    public bool Authorize(DashboardContext context)
+    {
+        return true;
+    }
+}
+
+/// <summary>
+/// 執行Hangfire Job 的服務
+/// </summary>
+/// <param name="serviceProvider"></param>
+public class HangfireJobScheduler(IServiceProvider serviceProvider)
+{
+    /// <summary>
+    /// App執行時啟動用於註冊所有的Job
+    /// </summary>
+    public void Start()
+    {
+        var jobRequestList = serviceProvider.GetServices<IJobRequest>();
+        foreach (var jobRequest in jobRequestList)
+        {
+            AddSchedule(jobRequest);
+        }
+    }
+
+    /// <summary>
+    /// 新增排程
+    /// </summary>
+    /// <param name="jobRequest"></param>
+    public void AddSchedule(IJobRequest jobRequest)
+    {
+        // 移除舊的排程，可以避免過了執行時間的排程自動啟動
+        RecurringJob.RemoveIfExists(jobRequest.JobId);
+        RecurringJob.AddOrUpdate(jobRequest.JobId, () => RunJob(jobRequest), jobRequest.Cron, new RecurringJobOptions()
+        {
+            TimeZone = TimeZoneInfo.Local // 使用本機時區
+        });
+    }
+
+    /// <summary>
+    /// 執行Job
+    /// </summary>
+    /// <param name="jobRequest"></param>
+    public void RunJob(IJobRequest jobRequest)
+    {
+        var activityName = $"Hangfire Job {jobRequest.JobId}";
+        // 因為執行這個環境是在Singleton的環境下，所以需要重新建立Scope
+        using var scope = serviceProvider.CreateScope();
+        var activitySource = scope.ServiceProvider.GetRequiredService<HangfireTelemetry>().ActivitySource;
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        using var activity = activitySource.StartActivity(activityName, ActivityKind.Client);
+        mediator.Send(jobRequest);
+    }
+
+}
+
 public static class HangfireDefaults
 {
     /// <summary>
@@ -21,7 +84,7 @@ public static class HangfireDefaults
     /// <summary>
     /// 資料庫連線字串
     /// </summary>
-    private const  string DB_CONNECTION_STRING= $"Data Source={DB_PATH}";
+    private const string DB_CONNECTION_STRING = $"Data Source={DB_PATH}";
 
     /// <summary>
     /// 加入 Hangfire 預設設定
@@ -31,7 +94,7 @@ public static class HangfireDefaults
     public static IServiceCollection AddHangfireDefault(this IServiceCollection services)
     {
         // 建立Demo使用的 SQLite 資料庫
-        services.AddDbContext<HangfireJobContext>(option=>option.UseSqlite(DB_CONNECTION_STRING));
+        services.AddDbContext<HangfireJobContext>(option => option.UseSqlite(DB_CONNECTION_STRING));
 
         // 取得所有實作 IJobRequest 的類別並註冊
         var jobRequestType = typeof(IJobRequest);
@@ -53,6 +116,10 @@ public static class HangfireDefaults
                 .UseRecommendedSerializerSettings()
                 .UseSQLiteStorage(DB_PATH); // 使用 SQLite 儲存資料
         });
+
+        services.AddOpenTelemetry().WithTracing(tracing => tracing.AddSource(HangfireTelemetry.ActivitySourceName));
+
+        services.AddSingleton<HangfireTelemetry>();
 
         // 註冊 Hangfire 服務
         services.AddHangfireServer();
@@ -84,64 +151,4 @@ public static class HangfireDefaults
         app.ApplicationServices.GetRequiredService<HangfireJobScheduler>().Start();
     }
 
-}
-
-
-
-/// <summary>
-/// 執行Hangfire Job 的服務
-/// </summary>
-/// <param name="serviceProvider"></param>
-public class HangfireJobScheduler(IServiceProvider serviceProvider)
-{
-    /// <summary>
-    /// App執行時啟動用於註冊所有的Job
-    /// </summary>
-    public void Start()
-    {
-        var jobRequestList = serviceProvider.GetServices<IJobRequest>();
-        foreach (var jobRequest in jobRequestList)
-        {
-            AddSchedule(jobRequest);
-        }
-    }
-
-    /// <summary>
-    /// 新增排程
-    /// </summary>
-    /// <param name="jobRequest"></param>
-    public void AddSchedule(IJobRequest jobRequest)
-    {
-        // 移除舊的排程，可以避免過了執行時間的排程自動啟動
-        RecurringJob.RemoveIfExists(jobRequest.JobId);
-        RecurringJob.AddOrUpdate(jobRequest.JobId, () => RunJob(jobRequest), jobRequest.Cron, new RecurringJobOptions(){
-            TimeZone = TimeZoneInfo.Local // 使用本機時區
-        });
-    }
-
-    /// <summary>
-    /// 執行Job
-    /// </summary>
-    /// <param name="jobRequest"></param>
-    public void RunJob(IJobRequest jobRequest)
-    {
-        // 因為執行這個環境是在Singleton的環境下，所以需要重新建立Scope
-        using var scope = serviceProvider.CreateScope();
-        var activitySource=scope.ServiceProvider.GetRequiredService<ActivitySource>();
-        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
-        using var activity = activitySource.StartActivity(jobRequest.JobId,ActivityKind.Client);
-        mediator.Send(jobRequest);
-    }
-
-}
-
-
-public class HangfireAuthorizationFilter : IDashboardAuthorizationFilter
-{
-    public bool Authorize(DashboardContext context)
-    {
-        //var httpcontext = context.GetHttpContext();
-        //return httpcontext.User.Identity.IsAuthenticated;
-        return true;
-    }
 }

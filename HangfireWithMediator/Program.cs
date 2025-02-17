@@ -3,7 +3,7 @@ using HangfireWithMediator.Core.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddServiceDefault();
+builder.Services.AddMediatRDefault();
 builder.Services.AddHangfireDefault();
 builder.AddOpenTelemetryDefault();
 
